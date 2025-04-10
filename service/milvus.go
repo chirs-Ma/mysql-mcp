@@ -38,6 +38,17 @@ func CreateCollection(ctx context.Context, cli *milvusclient.Client, collectionN
 		log.Println(err.Error())
 		return err
 	}
+	loadTask, err := cli.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(collectionName))
+	if err != nil {
+		log.Println(err.Error())
+		return err
+	}
+	// sync wait collection to be loaded
+	err = loadTask.Await(ctx)
+	if err != nil {
+		log.Println(err.Error())
+		return err
+	}
 	fmt.Println("collection created")
 	return nil
 }
@@ -54,7 +65,7 @@ func CheckCollection(ctx context.Context, cli *milvusclient.Client) (has bool, e
 func SaveToVDB(ctx context.Context, cli *milvusclient.Client, schemas []string, vector [][]float32) (err error) {
 	resp, err := cli.Insert(ctx, milvusclient.NewColumnBasedInsertOption(os.Getenv("MILVUS_COLLECTION")).
 		WithVarcharColumn("schema", schemas).
-		WithFloatVectorColumn("vector", 1024, vector),
+		WithFloatVectorColumn("vector", dim, vector),
 	)
 	if err != nil {
 		log.Println(err.Error())
