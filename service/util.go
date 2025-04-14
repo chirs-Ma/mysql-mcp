@@ -2,83 +2,102 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
-func EmbedQuery(query string) []float32 {
+// EmbeddingRequest 表示嵌入请求的结构
+type EmbeddingRequest struct {
+	Model          string `json:"model"`
+	Input          string `json:"input"`
+	EncodingFormat string `json:"encoding_format"`
+}
 
-	// 使用 map 构建请求参数
-	requestBody := map[string]string{
-		"model":           "BAAI/bge-m3",
-		"input":           query,
-		"encoding_format": "float",
+// EmbeddingResponse 表示嵌入响应的结构
+type EmbeddingResponse struct {
+	Data []struct {
+		Embedding []float64 `json:"embedding"`
+	} `json:"data"`
+}
+
+// EmbedQuery 将查询文本转换为向量嵌入
+func EmbedQuery(query string) ([]float32, error) {
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 使用结构体构建请求参数
+	requestBody := EmbeddingRequest{
+		Model:          "BAAI/bge-m3",
+		Input:          query,
+		EncodingFormat: "float",
 	}
 
-	// 将 map 转换为 JSON
+	// 将结构体转换为 JSON
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
-		log.Fatalf("Error marshaling JSON: %v", err)
+		return nil, fmt.Errorf("JSON 序列化失败: %v", err)
 	}
 
 	payload := bytes.NewBuffer(jsonData)
 
-	req, _ := http.NewRequest("POST", os.Getenv("SILICONFLOW_URL"), payload)
+	// 创建请求并处理错误
+	req, err := http.NewRequestWithContext(ctx, "POST", os.Getenv("SILICONFLOW_URL"), payload)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %v", err)
+	}
 
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", os.Getenv("SILICONFLOW_TOKEN")))
 	req.Header.Add("Content-Type", "application/json")
 
-	res, _ := http.DefaultClient.Do(req)
+	// 使用自定义的 HTTP 客户端，设置超时
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	// 发送请求并处理错误
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("发送请求失败: %v", err)
+	}
+	defer res.Body.Close() // 确保响应体被关闭
+
+	// 读取响应体
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %v", err)
+	}
+
+	// 检查状态码
 	if res.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(res.Body)
-		var response map[string]interface{}
-		if err := json.Unmarshal(body, &response); err != nil {
-			log.Fatalf("Error parsing JSON response: %v", err)
+		var errorResponse map[string]interface{}
+		if err := json.Unmarshal(body, &errorResponse); err != nil {
+			return nil, fmt.Errorf("请求失败，状态码: %d", res.StatusCode)
 		}
-		log.Fatalf("Request failed with status code: %d", res.StatusCode)
+		return nil, fmt.Errorf("请求失败，状态码: %d, 错误: %v", res.StatusCode, errorResponse)
 	}
 
-	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
-
-	// 解析 JSON 响应
-	var response map[string]interface{}
+	// 使用结构体解析响应
+	var response EmbeddingResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		log.Fatalf("Error parsing JSON response: %v", err)
+		return nil, fmt.Errorf("解析响应失败: %v", err)
 	}
 
-	// 提取嵌入向量
-	data, ok := response["data"].([]interface{})
-	if !ok {
-		log.Fatal("Invalid response format: data field not found or not an array")
+	// 验证响应数据
+	if len(response.Data) == 0 {
+		return nil, fmt.Errorf("响应中没有数据")
 	}
 
-	if len(data) == 0 {
-		log.Fatal("Empty data array in response")
+	// 转换为 float32 数组
+	embeddings := make([]float32, len(response.Data[0].Embedding))
+	for i, v := range response.Data[0].Embedding {
+		embeddings[i] = float32(v)
 	}
 
-	firstItem, ok := data[0].(map[string]interface{})
-	if !ok {
-		log.Fatal("Invalid response format: first data item is not an object")
-	}
-
-	embeddingData, ok := firstItem["embedding"].([]interface{})
-	if !ok {
-		log.Fatal("Invalid response format: embedding field not found or not an array")
-	}
-
-	// 将 interface{} 类型的切片转换为 float32 类型的切片
-	embeddings := make([]float32, len(embeddingData))
-	for i, v := range embeddingData {
-		if f, ok := v.(float64); ok {
-			embeddings[i] = float32(f)
-		} else {
-			log.Fatal("Invalid embedding value type: expected float64")
-		}
-	}
-	return embeddings
+	return embeddings, nil
 }
