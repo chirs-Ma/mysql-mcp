@@ -27,6 +27,15 @@ type EmbeddingResponse struct {
 
 // EmbedQuery 将查询文本转换为向量嵌入
 func EmbedQuery(query string) ([]float32, error) {
+	// 从main包获取配置
+	sfURL := os.Getenv("SILICONFLOW_URL")
+	sfToken := os.Getenv("SILICONFLOW_TOKEN")
+
+	// 验证配置
+	if sfURL == "" || sfToken == "" {
+		return nil, fmt.Errorf("SiliconFlow配置不完整")
+	}
+
 	// 创建带超时的上下文
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -47,12 +56,12 @@ func EmbedQuery(query string) ([]float32, error) {
 	payload := bytes.NewBuffer(jsonData)
 
 	// 创建请求并处理错误
-	req, err := http.NewRequestWithContext(ctx, "POST", os.Getenv("SILICONFLOW_URL"), payload)
+	req, err := http.NewRequestWithContext(ctx, "POST", sfURL, payload)
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %v", err)
 	}
 
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", os.Getenv("SILICONFLOW_TOKEN")))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", sfToken))
 	req.Header.Add("Content-Type", "application/json")
 
 	// 使用自定义的 HTTP 客户端，设置超时
