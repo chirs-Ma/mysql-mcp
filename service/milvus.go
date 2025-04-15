@@ -105,17 +105,24 @@ func SaveToVDB(ctx context.Context, cli *milvusclient.Client, schemas []string, 
 
 // SimilaritySearch 执行相似度搜索
 func SimilaritySearch(ctx context.Context, cli *milvusclient.Client, queryVector []float32) (string, error) {
-	loadTask, err := cli.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(Config.CollectionName))
+	stats, err := cli.GetCollectionStats(ctx, milvusclient.NewGetCollectionStatsOption(Config.CollectionName))
 	if err != nil {
-		Logger.Errorw("加载集合失败", "error", err)
+		Logger.Errorw("获取集合统计信息失败", "error", err)
 		return "", err
 	}
+	if stats["row_count"] == "0" {
+		loadTask, err := cli.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(Config.CollectionName))
+		if err != nil {
+			Logger.Errorw("加载集合失败", "error", err)
+			return "", err
+		}
 
-	// sync wait collection to be loaded
-	err = loadTask.Await(ctx)
-	if err != nil {
-		Logger.Errorw("等待集合加载完成失败", "error", err)
-		return "", err
+		// sync wait collection to be loaded
+		err = loadTask.Await(ctx)
+		if err != nil {
+			Logger.Errorw("等待集合加载完成失败", "error", err)
+			return "", err
+		}
 	}
 
 	resultSets, err := cli.Search(ctx, milvusclient.NewSearchOption(

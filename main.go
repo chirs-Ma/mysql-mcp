@@ -218,8 +218,6 @@ func initVectorDB(ctx context.Context, cli *milvusclient.Client) error {
 	}
 
 	return nil
-
-	return nil
 }
 
 // 从配置加载环境变量
@@ -299,7 +297,7 @@ func main() {
 	}
 
 	// 加载配置
-	if err := loadConfig(); err != nil {
+	if err = loadConfig(); err != nil {
 		logger.Fatalf("配置加载失败: %v", err)
 	}
 
