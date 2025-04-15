@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"mcp-mysql/service"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -54,9 +52,15 @@ var Config AppConfig
 
 // 初始化日志
 func initLogger() error {
-	// 创建日志目录
-	logDir := "./logs"
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	// 获取当前执行目录
+	execDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		return fmt.Errorf("无法获取执行目录: %v", err)
+	}
+
+	// 使用绝对路径创建日志目录
+	logDir := filepath.Join(execDir, "logs")
+	if err = os.MkdirAll(logDir, 0755); err != nil {
 		return fmt.Errorf("无法创建日志目录: %v", err)
 	}
 
@@ -272,19 +276,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 添加信号处理
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		fmt.Println("接收到终止信号，准备关闭...")
-		cancel()
-	}()
-
 	// 初始化日志
 	if err := initLogger(); err != nil {
 		fmt.Printf("日志初始化失败: %v\n", err)
-		os.Exit(1)
 	}
 	service.Logger = logger
 	defer logger.Sync() // 确保缓冲的日志被写入
