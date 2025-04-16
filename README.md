@@ -46,9 +46,9 @@
 
 ## 使用方法
 
-1. 确保已安装 MySQL 和 Milvus 数据库
-2. 配置 `.env` 文件中的环境变量
-3. 打包应用程序：`go build -o yourPath/mcp-mysql`
+1. 确保 MySQL 和 Milvus 可正常访问
+2. 打包应用程序：`go build -o yourPath/mcp-mysql`
+3. 在`yourPath` 创建 `.env` 文件并配置相关环境变量
 4. MCP 配置 
 ```json
  "mcpName": {
