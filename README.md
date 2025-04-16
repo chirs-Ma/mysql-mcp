@@ -2,6 +2,10 @@
 
 这是一个基于 MySQL 数据库和 Milvus 向量数据库的 MCP (Model Control Protocol) 项目。
 
+## 流程图
+![流程图](process.png)
+
+
 ## 环境配置
 
 项目需要以下环境变量配置（在 `.env` 文件中设置）：
