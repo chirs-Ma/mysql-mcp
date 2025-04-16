@@ -29,8 +29,8 @@
 
 ## 功能特性
 
-- 执行 SQL 查询：通过 `execute_sql` 工具执行 MySQL 数据库查询
 - 表结构查询：通过 `get_can_use_table` 工具根据自然语言描述查找相关表结构
+- 执行 SQL 查询：通过 `execute_sql` 工具执行 MySQL 数据库查询
 - 向量相似度搜索：使用 Milvus 进行高效的向量相似度搜索
 - 自动表结构索引：系统启动时自动获取所有表结构并创建向量索引
 
@@ -39,15 +39,29 @@
 1. **系统初始化**：加载环境配置、初始化日志系统、连接数据库
 2. **向量数据库准备**：检查并创建 Milvus 集合，获取所有表结构并进行向量化处理
 3. **请求处理**：
-   - SQL 查询：直接执行 SQL 语句并返回结果
    - 表结构查询：将自然语言描述转换为向量，在 Milvus 中搜索相似表结构
+   - SQL 查询：直接执行 SQL 语句并返回结果
+  
 
 
 ## 使用方法
 
 1. 确保已安装 MySQL 和 Milvus 数据库
 2. 配置 `.env` 文件中的环境变量
-3. 运行应用程序：`go run main.go`
+3. 打包应用程序：`go build -o yourPath/mcp-mysql`
+4. MCP 配置 
+```json
+ "mcpName": {
+      "timeout": 60,
+      "command": "yourPath/mcp-mysql",
+      "args": [
+        "-m",
+        "query",
+        ""
+      ],
+      "transportType": "stdio"
+    }
+   ```
 
 ## 依赖项
 
@@ -56,3 +70,9 @@
 - Milvus 向量数据库 v2.5+
 - SiliconFlow API（用于生成文本嵌入向量）
 - zap 日志库（用于结构化日志记录）
+
+## 其他资料
+* MCP 官方文档：https://modelcontextprotocol.io/introduction
+* vscode 安装 cline 扩展(MCP host端)：https://docs.cline.bot/getting-started/installing-cline
+* milvus 本地安装教程：https://milvus.io/docs/install_standalone-docker-compose.md
+* 硅基流动注册、APIKEY 获取：https://docs.siliconflow.cn/cn/userguide/quickstart
