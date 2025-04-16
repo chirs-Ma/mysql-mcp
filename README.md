@@ -1,6 +1,9 @@
 # MySQL MCP 项目
 
-这是一个基于 MySQL 数据库和 Milvus 向量数据库的 MCP (Model Control Protocol) 项目。
+该项目是一个 Mysql 的 MCP Server，提供对MySQL数据库的访问。结合了传统关系型数据库(MySQL)和向量数据库(Milvus)的优势，实现了以下核心功能：
+1. 数据库schemas查询 ：允许LLMs通过自然语言查询获取相关表结构信息
+2. SQL查询执行 ：支持执行SQL语句并返回查询结果
+
 
 ## 流程图
 ![流程图](process.png)
