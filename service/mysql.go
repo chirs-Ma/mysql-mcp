@@ -98,7 +98,7 @@ func Execute(ctx context.Context, db *sql.DB, sql string) (string, error) {
 	}
 }
 
-func GetAllTableSchema(ctx context.Context, db *sql.DB, ch chan string) {
+func GetAllTableSchema(ctx context.Context, db *sql.DB, ch chan map[string]string) {
 	defer close(ch) // 确保函数结束时关闭通道
 
 	if db == nil {
@@ -147,9 +147,12 @@ func GetAllTableSchema(ctx context.Context, db *sql.DB, ch chan string) {
 						Logger.Warnw("无法扫描表结构", "table", table, "error", err)
 						return
 					}
+					tableMap := map[string]string{
+						tableName: createTableStmt,
+					}
 
 					select {
-					case ch <- createTableStmt:
+					case ch <- tableMap:
 						// 成功发送到通道
 					case <-ctx.Done():
 						Logger.Info("上下文取消，停止发送表结构")

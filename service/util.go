@@ -3,12 +3,16 @@ package service
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"sync"
 	"time"
+
+	"github.com/milvus-io/milvus/client/v2/milvusclient"
 )
 
 // EmbeddingRequest 表示嵌入请求的结构
@@ -109,4 +113,51 @@ func EmbedQuery(query string) ([]float32, error) {
 	}
 
 	return embeddings, nil
+}
+
+// UpdateSchema 定时更新数据库表结构
+func UpdateSchema(db *sql.DB, cli *milvusclient.Client) {
+	// 创建定时器，每隔一段时间执行一次更新
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	var updateMutex sync.Mutex
+
+	// 定时执行
+	for range ticker.C {
+		// 尝试获取锁，如果已经在执行则跳过本次更新
+		if !updateMutex.TryLock() {
+			Logger.Warn("上一次更新任务仍在进行中，跳过本次更新")
+			continue
+		}
+		defer updateMutex.Unlock()
+		tableCh := make(chan map[string]string, 10)
+		GetAllTableSchema(context.Background(), db, tableCh)
+
+		for tableMap := range tableCh {
+			for tableName, schema := range tableMap {
+				notExistTables := CheckRowExist([]string{tableName})
+				if len(notExistTables) > 0 {
+					// 执行更新操作
+					_, err := SaveToSQLite(notExistTables)
+					if err != nil {
+						Logger.Errorw("数据保存失败", "error", err)
+						continue
+					}
+					vectors, err := EmbedQuery(schema)
+					if err != nil {
+						Logger.Errorw("向量嵌入失败", "error", err)
+						return
+					}
+
+					err = SaveToVDB(context.Background(), cli, []string{schema}, [][]float32{vectors})
+					if err != nil {
+						Logger.Errorw("保存向量失败", "error", err)
+					}
+				}
+			}
+
+		}
+
+	}
 }

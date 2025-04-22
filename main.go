@@ -157,7 +157,7 @@ func initVectorDB(ctx context.Context, cli *milvusclient.Client) error {
 		}
 
 		// 创建带缓冲的通道
-		schemaChan := make(chan string, 10)
+		schemaChan := make(chan map[string]string, 10)
 
 		// 创建子上下文用于控制goroutine生命周期
 		workCtx, workCancel := context.WithCancel(ctx)
@@ -176,13 +176,13 @@ func initVectorDB(ctx context.Context, cli *milvusclient.Client) error {
 		semaphore := make(chan struct{}, maxWorkers)
 
 		// 处理表结构
-		for schema := range schemaChan {
+		for tableMap := range schemaChan {
 			select {
 			case <-ctx.Done():
 				logger.Info("上下文取消，停止处理表结构")
 				return ctx.Err()
 			default:
-				if schema == "" {
+				if len(tableMap) == 0 {
 					continue
 				}
 
@@ -190,7 +190,7 @@ func initVectorDB(ctx context.Context, cli *milvusclient.Client) error {
 				semaphore <- struct{}{}
 
 				wg.Add(1)
-				go func(s string) {
+				go func(s map[string]string) {
 					defer wg.Done()
 					defer func() { <-semaphore }() // 释放信号量
 
@@ -201,18 +201,20 @@ func initVectorDB(ctx context.Context, cli *milvusclient.Client) error {
 					default:
 						// 继续处理
 					}
+					for _, schema := range s {
+						vectors, err := service.EmbedQuery(schema)
+						if err != nil {
+							logger.Errorw("向量嵌入失败", "error", err)
+							return
+						}
 
-					vectors, err := service.EmbedQuery(s)
-					if err != nil {
-						logger.Errorw("向量嵌入失败", "error", err)
-						return
+						err = service.SaveToVDB(workCtx, cli, []string{schema}, [][]float32{vectors})
+						if err != nil {
+							logger.Errorw("保存向量失败", "error", err)
+						}
 					}
 
-					err = service.SaveToVDB(workCtx, cli, []string{s}, [][]float32{vectors})
-					if err != nil {
-						logger.Errorw("保存向量失败", "error", err)
-					}
-				}(schema)
+				}(tableMap)
 			}
 		}
 
@@ -323,6 +325,16 @@ func main() {
 		logger.Fatalf("向量数据库初始化失败: %v", err)
 	}
 
+	// 初始化SQLite数据库
+	logger.Info("正在初始化SQLite数据库...")
+	if err = service.InitSQLite(); err != nil {
+		logger.Fatalf("SQLite初始化失败: %v", err)
+	}
+	go func() {
+		service.UpdateSchema(db, cli)
+	}()
+	defer service.CloseSQLite()
+
 	// Create a new MCP server
 	s := server.NewMCPServer(
 		"mcp-mysql",
@@ -354,6 +366,7 @@ func main() {
 	if err := server.ServeStdio(s); err != nil {
 		logger.Errorf("服务器错误: %v", err)
 	}
+
 }
 
 func executeSql(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
