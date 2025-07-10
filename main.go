@@ -286,8 +286,36 @@ func main() {
 	defer logger.Sync() // 确保缓冲的日志被写入
 
 	// 加载.env文件
-	envPath := filepath.Join(filepath.Dir(os.Args[0]), ".env")
-	err := godotenv.Load(envPath)
+	// 加载.env文件 - 按优先级尝试多个位置
+	var envPath string
+	var err error
+
+	// 1. 首先尝试可执行文件所在目录
+	execPath, execErr := os.Executable()
+	if execErr == nil {
+		execDir := filepath.Dir(execPath)
+		envPath = filepath.Join(execDir, ".env")
+		fmt.Printf("尝试加载: %s\n", envPath)
+		err = godotenv.Load(envPath)
+	}
+
+	// 2. 如果失败，尝试当前工作目录
+	if err != nil {
+		cwd, cwdErr := os.Getwd()
+		if cwdErr == nil {
+			envPath = filepath.Join(cwd, ".env")
+			fmt.Printf("尝试加载: %s\n", envPath)
+			err = godotenv.Load(envPath)
+		}
+	}
+
+	// 3. 如果还是失败，尝试相对路径
+	if err != nil {
+		envPath = "./.env"
+		fmt.Printf("尝试加载: %s\n", envPath)
+		err = godotenv.Load(envPath)
+	}
+
 	if err != nil {
 		logger.Warnf("无法加载.env文件(%s): %v，尝试使用环境变量", envPath, err)
 	}
@@ -356,10 +384,18 @@ func main() {
 			mcp.Description("SQL query to execute"),
 		),
 	)
+	docTool := mcp.NewTool("doc",
+		mcp.WithDescription("Read document and save to vector database"),
+		mcp.WithString("path",
+			mcp.Required(),
+			mcp.Description("Document path to read"),
+		),
+	)
 
 	// Add tool handler
 	s.AddTool(getCanUseTabletool, getCanUseTable)
 	s.AddTool(executeSqltool, executeSql)
+	s.AddTool(docTool, readDocAndSaveToVDB)
 
 	// Start the stdio server
 	logger.Info("启动MCP服务器...")
@@ -413,4 +449,25 @@ func getCanUseTable(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 	}
 
 	return mcp.NewToolResultText(res), nil
+}
+
+func readDocAndSaveToVDB(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	path := request.Params.Arguments["path"].(string)
+	logger.Infof("执行文档读取: %s", path)
+	if path == "" {
+		return nil, fmt.Errorf("path is empty")
+	}
+
+	docs, err := service.LoadDoc(ctx, path)
+	if err != nil {
+		logger.Errorw("文档解析失败", "path", path, "error", err)
+		return nil, err
+	}
+	err = service.SaveDocToMilvus(ctx, cli, docs)
+	if err != nil {
+		logger.Errorw("文档保存失败", "path", path, "error", err)
+		return nil, err
+	}
+
+	return mcp.NewToolResultText("文档处理成功"), nil
 }
