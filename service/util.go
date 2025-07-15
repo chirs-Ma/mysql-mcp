@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudwego/eino/schema"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 )
 
@@ -160,4 +161,21 @@ func UpdateSchema(db *sql.DB, cli *milvusclient.Client) {
 		}
 
 	}
+}
+
+func SaveDocToMilvus(ctx context.Context, cli *milvusclient.Client, docs []*schema.Document) error {
+	for _, doc := range docs {
+		embedding, err := EmbedQuery(doc.Content)
+		if err != nil {
+			Logger.Errorw("文档嵌入失败", "error", err)
+			continue
+		}
+		err = SaveToVDB(ctx, cli, []string{doc.Content}, [][]float32{embedding})
+		if err != nil {
+			Logger.Errorw("文档内容保存向量失败", "error", err)
+			continue
+		}
+	}
+
+	return nil
 }
